@@ -109,11 +109,19 @@ if [[ $BWArun != "" ]]; then
 else
         echo "bwa mem detected"
 
+PFQ=$(command -v pairfq_lite.pl >//dev/null 2>&1 || { echo >&2 "Pairfq_lite.pl not detected. Please check that it is in your PATH"; })
+if [[ $PFQ != "" ]]; then
+	echo $PFG
+	exit 1
+else
+	echo "pairfq_lite.pl detected"
+fi
+
 #Check number of target sequences in the file
 if [ -e $DB ]; then
 echo "Counting number of target sequences present in the database"
 	if [[ $DB =~ .gz$ ]]; then
-	RefCount=$(zcat $DB | grep '^>' | grep -c $string -)
+	RefCount=$(zcat $DB | tee $DB.unzip | grep '^>' | grep -c $string -)
 	else
 	RefCount=$(grep '^>' $DB | grep -c $string -)
 	fi
@@ -125,7 +133,8 @@ echo "Counting number of target sequences present in the database"
 	echo "Moving on to Mapping"
 	fi
 else
-echo "The database fasta file does not seem to be present, let's proceed assuming that the correct binaries are present"
+echo "The database fasta file does not seem to be present, we will require this file for working with Samtools"
+exit 1
 fi
 
 if [[ -e $DB.amb || -e $DB.ann || -e $DB.bwt || -e $DB.pac || -e $DB.sa ]] ; then
@@ -140,11 +149,33 @@ echo "Index files not detected, let's build them!"
 	fi
 fi
 
+if [[ $DB =~ .gz$ ]]; then
+bwa mem -t $Threads $DB $R1 $R2 | samtools view -bT $DB.unzip - | samtools -@ $Threads -o $Prefix.sorted.bam -
+samtools index $Prefix.sorted.bam
+samtools fastq -f 4 $Prefix.sorted.bam -1 $Prefix.UnMapped.1.fq -2 $Prefix.UnMapped.2.fq
+samtools view $Prefix.sorted.bam | awk -v var="$string" '$3 ~ var' | samtools view -bT $DB.unzip | samtools fastq -1 $Prefix.Mapped.1.fq -2 $Prefix.Mapped.2.fastq
+rm $DB.unzip
+else
 bwa mem -t $Threads $DB $R1 $R2 | samtools view -bT $DB - | samtools -@ $Threads -o $Prefix.sorted.bam -
 samtools index $Prefix.sorted.bam
 samtools fastq -f 4 $Prefix.sorted.bam -1 $Prefix.UnMapped.1.fq -2 $Prefix.UnMapped.2.fq
-samtools view $Prefix.sorted.bam 
+samtools view $Prefix.sorted.bam | awk -v var="$string" '$3 ~ var' | samtools view -bT $DB | samtools fastq -1 $Prefix.Mapped.1.fq -2 $Prefix.Mapped.2.fastq
+fi
 
+#repair fastq files
+#No need to add info as Samtools does that
+
+pairfq_lite.pl makepairs -f $Prefix.Mapped.1.fq -r $Prefix.Mapped.2.fastq -fp $Prefix.Mapped.RePair.1.fq -rp $Prefix.Mapped.RePair.2.fq -fs $Prefix.Mapped.NoPair.1.fq -rs $Prefix.Mapped.NoPair.2.fq
+pairfq_lite.pl makepairs -f $Prefix.UnMapped.1.fq -r $Prefix.UnMapped.2.fastq -fp $Prefix.UnMapped.RePair.1.fq -rp $Prefix.UnMapped.RePair.2.fq -fs $Prefix.UnMapped.NoPair.1.fq -rs $Prefix.UnMapped.NoPair.2.fq
+#Clean up - Saves Gigs of disk space!
+rm $Prefix.UnMapped.NoPair.1.fq
+rm $Prefix.UnMapped.NoPair.2.fq
+rm $Prefix.Mapped.NoPair.1.fq
+rm $Prefix.Mapped.NoPair.2.fq
+rm $Prefix.Mapped.1.fq
+rm $Prefix.Mapped.2.fastq
+rm $Prefix.UnMapped.1.fq
+rm $Prefix.UnMapped.2.fastq
 rm $Prefix.sorted.bam
 
 
