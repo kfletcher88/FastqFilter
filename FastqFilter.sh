@@ -17,6 +17,8 @@ usage="($basename "$0") [-h] [-d] [-1] [-2] [-o] [-s] [-T] [-L] --  A wrapper to
 	1. A pair of files containing paired, unmapped reads
 	2. A pair of files containing paired reads which mapped to target reference sequences
 
+	These four files will be placed in a directory named with option o
+
         Please note, the database must be formtatted such that each target reference sequence is labelled with a custom string, to allow the identification of reads mapping to these sequences.
 	The README.md contains instructions for how to do this, if required:
 
