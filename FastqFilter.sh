@@ -183,9 +183,10 @@ rm $Prefix.UnMapped.1.fq
 rm $Prefix.UnMapped.2.fq
 rm $Prefix.sorted.bam
 rm $Prefix.sorted.bam.bai
-rm $Prefix.Mapped.info.1.fq
-rm $Prefix.Mapped.info.2.fq
-rm $Prefix.UnMapped.info.1.fq
+rm $Prefix.Mapped.info.1.fq 
+rm $Prefix.Mapped.info.2.fq 
+rm $Prefix.UnMapped.info.1.fq 
 rm $Prefix.UnMapped.info.2.fq
-#Would be good to make a directory and deposit results there.
+mkdir -p $Prefix
+mv $Prefix.UnMapped.RePair.1.fq $Prefix.UnMapped.RePair.2.fq $Prefix.Mapped.RePair.1.fq $Prefix.Mapped.RePair.2.fq $Prefix/
 exit
