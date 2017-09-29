@@ -1,6 +1,9 @@
 A wrapper script to filter fastq reads against a custom nucleotide database and extract:
+
 	1. Reads which do not map to anything
+
 	2. Reads which map to reference organisms of interest.
+
 These read files will be placed in a new directory, named by the user with option -o
 
 For usage type:
