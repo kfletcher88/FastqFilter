@@ -13,14 +13,12 @@
 #IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 #OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-usage="$basename "$0") [-h] [-d] [-1] [-2] [-0] [-s] [-T] [-L] --  A wrapper to run align paired end next generation sequencing reads to a custom database and output:
+usage="($basename "$0") [-h] [-d] [-1] [-2] [-o] [-s] [-T] [-L] --  A wrapper to run align paired end next generation sequencing reads to a custom database and output:
 	1. A pair of files containing paired, unmapped reads
 	2. A pair of files containing paired reads which mapped to target reference sequences
 
         Please note, the database must be formtatted such that each target reference sequence is labelled with a custom string, to allow the identification of reads mapping to these sequences.
-	This renaming may be performed with an awk one-lines, such as:
-
-	awk -v '/^>/{print ">""TargetSeq-" ++i; next}{print}' < Input.fasta > Output.fasta
+	The README.md contains instructions for how to do this, if required:
 
 	Before combining all reference sequences together
         We have hard-coded in the blast word size (16) and number of threads (1). If you wish to change these then please edit the command on line 156
@@ -46,7 +44,7 @@ All executable should be located in the PATH
 "
 #How about an option to obtain only unmapped reads
 #How about an option to obtain unpaired reads
-while getopts ':hd:1:2:0:s:LT:' option; do
+while getopts ':hd:1:2:o:s:T:L' option; do
         case "$option" in
                 h)  echo "$usage"
                          exit
@@ -64,7 +62,8 @@ while getopts ':hd:1:2:0:s:LT:' option; do
 		L)  echo "$DepL"
 			 exit
 			 ;;
-		T)  threads=$OPTARG
+		T)  Threads=$OPTARG
+			 ;;
                 \?) printf "illegal option: -%s\n\n" "$OPTARG" >&2
                     echo "$usage"
                     exit 1
@@ -72,13 +71,6 @@ while getopts ':hd:1:2:0:s:LT:' option; do
         esac
 done
 
-#Set defaults if not arguments provided
-if [[ -z $Threads ]]; then
-Threads=1
-echo "
-Threads not specified, will proceed with default [1]
-"
-fi
 
 #Check Arguments provided
 if [[ -z $DB || -z $R1 || -z $R2 || -z $Prefix || -z $string ]]; then
@@ -87,6 +79,14 @@ if [[ -z $DB || -z $R1 || -z $R2 || -z $Prefix || -z $string ]]; then
 "
        echo "$usage"
        exit 1
+fi
+
+#Set defaults if not arguments provided
+if [[ -z $Threads ]]; then
+Threads=1
+echo "
+Threads not specified, will proceed with default [1]
+"
 fi
 
 #Check for previously generated files to make sure they are not overwrote
@@ -108,10 +108,10 @@ if [[ $BWArun != "" ]]; then
         exit 1
 else
         echo "bwa mem detected"
-
+fi
 PFQ=$(command -v pairfq_lite.pl >//dev/null 2>&1 || { echo >&2 "Pairfq_lite.pl not detected. Please check that it is in your PATH"; })
 if [[ $PFQ != "" ]]; then
-	echo $PFG
+	echo $PFQ
 	exit 1
 else
 	echo "pairfq_lite.pl detected"
@@ -125,7 +125,7 @@ echo "Counting number of target sequences present in the database"
 	else
 	RefCount=$(grep '^>' $DB | grep -c $string -)
 	fi
-	echo "We detected $RefCount 
+	echo "We detected $RefCount"
 	if [[ $RefCount == 0 ]]; then
 	echo "Reference sequences are required for positive mapping. Please check that you have formatted the database correctly"
 	exit 1
@@ -150,32 +150,42 @@ echo "Index files not detected, let's build them!"
 fi
 
 if [[ $DB =~ .gz$ ]]; then
-bwa mem -t $Threads $DB $R1 $R2 | samtools view -bT $DB.unzip - | samtools -@ $Threads -o $Prefix.sorted.bam -
+bwa mem -t $Threads $DB $R1 $R2 | samtools view -bT $DB.unzip - | samtools sort -o $Prefix.sorted.bam -
 samtools index $Prefix.sorted.bam
-samtools fastq -f 4 $Prefix.sorted.bam -1 $Prefix.UnMapped.1.fq -2 $Prefix.UnMapped.2.fq
-samtools view $Prefix.sorted.bam | awk -v var="$string" '$3 ~ var' | samtools view -bT $DB.unzip | samtools fastq -1 $Prefix.Mapped.1.fq -2 $Prefix.Mapped.2.fastq
+samtools fastq -f 4 -1 $Prefix.UnMapped.1.fq -2 $Prefix.UnMapped.2.fq $Prefix.sorted.bam
+samtools view $Prefix.sorted.bam | awk -v var="$string" '$3 ~ var' | samtools view -bT $DB.unzip | samtools fastq -1 $Prefix.Mapped.1.fq -2 $Prefix.Mapped.2.fq -
 rm $DB.unzip
 else
-bwa mem -t $Threads $DB $R1 $R2 | samtools view -bT $DB - | samtools -@ $Threads -o $Prefix.sorted.bam -
+bwa mem -t $Threads $DB $R1 $R2 | samtools view -bT $DB - | samtools sort -o $Prefix.sorted.bam $Prefix.bam
 samtools index $Prefix.sorted.bam
-samtools fastq -f 4 $Prefix.sorted.bam -1 $Prefix.UnMapped.1.fq -2 $Prefix.UnMapped.2.fq
-samtools view $Prefix.sorted.bam | awk -v var="$string" '$3 ~ var' | samtools view -bT $DB | samtools fastq -1 $Prefix.Mapped.1.fq -2 $Prefix.Mapped.2.fastq
+samtools fastq -f 4 -1 $Prefix.UnMapped.1.fq -2 $Prefix.UnMapped.2.fq $Prefix.sorted.bam
+samtools view $Prefix.sorted.bam | awk -v var="$string" '$3 ~ var' | samtools view -bT $DB | samtools fastq -1 $Prefix.Mapped.1.fq -2 $Prefix.Mapped.2.fq -
 fi
 
 #repair fastq files
-#No need to add info as Samtools does that
+#Need to add subroutine, to only add info when necessary (something like check a read, if it ends \1 then).
+pairfq_lite.pl addinfo -i $Prefix.Mapped.1.fq -o $Prefix.Mapped.info.1.fq -p 1
+pairfq_lite.pl addinfo -i $Prefix.Mapped.2.fq -o $Prefix.Mapped.info.2.fq -p 2
+pairfq_lite.pl addinfo -i $Prefix.UnMapped.1.fq -o $Prefix.UnMapped.info.1.fq -p 1
+pairfq_lite.pl addinfo -i $Prefix.UnMapped.2.fq -o $Prefix.UnMapped.info.2.fq -p 2
 
-pairfq_lite.pl makepairs -f $Prefix.Mapped.1.fq -r $Prefix.Mapped.2.fastq -fp $Prefix.Mapped.RePair.1.fq -rp $Prefix.Mapped.RePair.2.fq -fs $Prefix.Mapped.NoPair.1.fq -rs $Prefix.Mapped.NoPair.2.fq
-pairfq_lite.pl makepairs -f $Prefix.UnMapped.1.fq -r $Prefix.UnMapped.2.fastq -fp $Prefix.UnMapped.RePair.1.fq -rp $Prefix.UnMapped.RePair.2.fq -fs $Prefix.UnMapped.NoPair.1.fq -rs $Prefix.UnMapped.NoPair.2.fq
+
+pairfq_lite.pl makepairs -f $Prefix.Mapped.info.1.fq -r $Prefix.Mapped.info.2.fq -fp $Prefix.Mapped.RePair.1.fq -rp $Prefix.Mapped.RePair.2.fq -fs $Prefix.Mapped.NoPair.1.fq -rs $Prefix.Mapped.NoPair.2.fq
+pairfq_lite.pl makepairs -f $Prefix.UnMapped.info.1.fq -r $Prefix.UnMapped.info.2.fq -fp $Prefix.UnMapped.RePair.1.fq -rp $Prefix.UnMapped.RePair.2.fq -fs $Prefix.UnMapped.NoPair.1.fq -rs $Prefix.UnMapped.NoPair.2.fq
 #Clean up - Saves Gigs of disk space!
 rm $Prefix.UnMapped.NoPair.1.fq
 rm $Prefix.UnMapped.NoPair.2.fq
 rm $Prefix.Mapped.NoPair.1.fq
 rm $Prefix.Mapped.NoPair.2.fq
 rm $Prefix.Mapped.1.fq
-rm $Prefix.Mapped.2.fastq
+rm $Prefix.Mapped.2.fq
 rm $Prefix.UnMapped.1.fq
-rm $Prefix.UnMapped.2.fastq
+rm $Prefix.UnMapped.2.fq
 rm $Prefix.sorted.bam
-
-
+rm $Prefix.sorted.bam.bai
+rm $Prefix.Mapped.info.1.fq
+rm $Prefix.Mapped.info.2.fq
+rm $Prefix.UnMapped.info.1.fq
+rm $Prefix.UnMapped.info.2.fq
+#Would be good to make a directory and deposit results there.
+exit
