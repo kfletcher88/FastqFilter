@@ -4,7 +4,15 @@ A wrapper script to filter fastq reads against a custom nucleotide database and 
 
 2. Reads which map to reference organisms of interest.
 
-These read files will be placed in a new directory, named by the user with option -o
+These read files will be placed in a new directory, named by the user with option `-o`
+
+The software required by this wrapper are:
+
+1. [BWA](https://arxiv.org/abs/1303.3997v2 "Li et al. 2013")
+2. [SAMtools](https://www.ncbi.nlm.nih.gov/pubmed/19505943 "Li et al. 2009")
+3. [PairFQ_lite](https://github.com/sestaton/Pairfq "Staton GitHub repo")
+
+Upon initiation the script will check that these executables are in the PATH.
 
 For usage type:
 
