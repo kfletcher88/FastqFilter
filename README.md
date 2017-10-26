@@ -29,7 +29,7 @@ The basic commands ran are:
 
 ```
 bwa index [Database.fa] 
-bwa mem  [Database.fa] [Read1.fq] [Read2.fq] | samtools view -bT [Database.fa] - | samtools sort -o [Prefix].sorted.bam -
+bwa mem [Database.fa] [Read1.fq] [Read2.fq] | samtools view -bT [Database.fa] - | samtools sort -o [Prefix].sorted.bam -
 
 samtools index [Prefix].sorted.bam
 samtools fastq -f 4 -1 [Prefix].UnMapped.1.fq -2 [Prefix].UnMapped.2.fq [Prefix].sorted.bam
@@ -45,10 +45,15 @@ pairfq_lite.pl makepairs -f [Prefix].UnMapped.info.1.fq -r [Prefix].UnMapped.inf
 ```
 
 Where the text contained in square brackets are variables provided to the shell script. Specifically:
+
 `-d` Database.fa
+
 `-1` Read1.fq
+
 `-2` Read2.fq
+
 `-o` Prefix
+
 `-s` Identifier string, by which sequences, closely related to the organism under study, can be identified for positive filtering.
 
 In the end, four fastq files are output and are in their correct pairs.
