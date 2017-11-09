@@ -13,17 +13,23 @@
 #IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 #OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-usage="($basename "$0") [-h] [-d] [-1] [-2] [-M] [-o] [-s] [-T] [-L] --  A wrapper to run align paired end next generation sequencing reads to a custom database and output:
-	1. A pair of files containing paired, unmapped reads
-	2. A pair of files containing paired reads which mapped to target reference sequences
+usage="($basename "$0") [-h] [-d] [-1] [-2] [-M] [-o] [-s] [-T] [-L] --  A wrapper to run align paired end next generation sequencing reads to a custom database. There are three modes in which it may be ran: 
+	1. Paired end only, specified with flags 1 & 2 .
+		Reads will be mapped in pairs. Output files will be:
+			A pair of files containing paired, unmapped reads
+			A pair of files containing paired reads which mapped to target reference sequences
+			In total, 4 files containing single end reads. Those that mapped but couldn't be repaired and those that did not map and couldn't be repeaired
+	2. Single end only, specified with flag M .
+		Reads will be mapped as singletons. Two output files will be generated:
+			A single end read file that could be mapped.
+			A single end read file which could not be mapped.
+	3. Paired and Single end, specified with all three flags 1 2 & M .
+		This will run both the above described process in sequence, producing ten output files.
 
-	These four files will be placed in a directory named with option o
+	These files will be placed in a directory named with option o
 
         Please note, the database must be formtatted such that each target reference sequence is labelled with a custom string, to allow the identification of reads mapping to these sequences.
-	The README.md contains instructions for how to do this, if required:
-
-	Before combining all reference sequences together
-        We have hard-coded in the blast word size (16) and number of threads (1). If you wish to change these then please edit the command on line 156
+	The README.md contains instructions for how to do this, if required.
 
 Options:
         -h show this help message
@@ -35,6 +41,7 @@ Options:
         -s Unique string, by which target reference sequences may be identified
 	-T Number of threads (default = 8)
 	-L Dependency list
+	-X Expnanded output, will output more files, 8 from a paired end run or 2 from a single end run, compared to 2 and 1 respectively.
 "
 
 DepL="Dependencies required to run this script successfully are:
@@ -47,7 +54,7 @@ All executable should be located in the PATH
 "
 #How about an option to obtain only unmapped reads
 #How about an option to obtain unpaired reads
-while getopts ':hd:1:2:M:o:s:T:L' option; do
+while getopts ':hd:1:2:M:o:s:T:LX' option; do
         case "$option" in
                 h)  echo "$usage"
                          exit
@@ -68,6 +75,8 @@ while getopts ':hd:1:2:M:o:s:T:L' option; do
 			 exit
 			 ;;
 		T)  Threads=$OPTARG
+			 ;;
+		X)  Expand=1
 			 ;;
                 \?) printf "illegal option: -%s\n\n" "$OPTARG" >&2
                     echo "$usage"
@@ -190,23 +199,23 @@ if [[ $DB =~ .gz$ ]]; then
 	if [[ -n $SE ]]; then
 	bwa mem -t $Threads $DB $SE | samtools view -bT $DB.unzip - | samtools sort -o $Prefix.sorted.bam -
 	samtools index $Prefix.sorted.bam
-        samtools fastq -f 4 -0 $Prefix.UnMapped.SE.fq $Prefix.sorted.bam
+        samtools fastq -f 4 -0 $Prefix-RFA/$Prefix.UnMapped.SE.fq $Prefix.sorted.bam
         samtools view $Prefix.sorted.bam | awk -v var="$string" '$3 ~ var' | samtools view -bT $DB.unzip | samtools fastq -0 $Prefix-RFA/$Prefix.Mapped.SE.fq -
 	fi
 rm $DB.unzip
 
 else
 	if [[ -n $R1 && -n $R2 ]]; then
-	bwa mem -t $Threads $DB $R1 $R2 | samtools view -bT $DB - | samtools sort -o $Prefix.sorted.bam $Prefix.bam
+	bwa mem -t $Threads $DB $R1 $R2 | samtools view -bT $DB - | samtools sort -o $Prefix.sorted.bam -
 	samtools index $Prefix.sorted.bam
 	samtools fastq -f 4 -1 $Prefix.UnMapped.1.fq -2 $Prefix.UnMapped.2.fq $Prefix.sorted.bam
 	samtools view $Prefix.sorted.bam | awk -v var="$string" '$3 ~ var' | samtools view -bT $DB | samtools fastq -1 $Prefix.Mapped.1.fq -2 $Prefix.Mapped.2.fq -
 	fi
 	if [[ -n $SE ]]; then
-	bwa mem -t $Threads $DB $SE | samtools view -bT $DB - | samtools sort -o $Prefix.sorted.bam $Prefix.bam
+	bwa mem -t $Threads $DB $SE | samtools view -bT $DB - | samtools sort -o $Prefix.sorted.bam -
 	samtools index $Prefix.sorted.bam
-        samtools fastq -f 4 -0 $Prefix.UnMapped.SE.fq  $Prefix.sorted.bam 
-        samtools view $Prefix.sorted.bam | awk -v var="$string" '$3 ~ var' | samtools view -bT $DB | samtools fastq -o $Prefix-RFA/$Prefix.Mapped.SE.fq 
+        samtools fastq -f 4 -0 $Prefix-RFA/$Prefix.UnMapped.SE.fq  $Prefix.sorted.bam 
+        samtools view $Prefix.sorted.bam | awk -v var="$string" '$3 ~ var' | samtools view -bT $DB | samtools fastq -0 $Prefix-RFA/$Prefix.Mapped.SE.fq - 
 	fi
 fi
 
@@ -235,4 +244,22 @@ rm $Prefix.Mapped.info.1.fq
 rm $Prefix.Mapped.info.2.fq 
 rm $Prefix.UnMapped.info.1.fq 
 rm $Prefix.UnMapped.info.2.fq
+if [[ -z $Expand && -n $R1 && -n $R2 ]]; then
+cat $Prefix-RFA/$Prefix.Mapped.RePair.1.fq $Prefix-RFA/$Prefix.UnMapped.RePair.1.fq  > $Prefix-RFA/$Prefix.RFA.1.fq
+cat $Prefix-RFA/$Prefix.Mapped.RePair.2.fq $Prefix-RFA/$Prefix.UnMapped.RePair.2.fq  > $Prefix-RFA/$Prefix.RFA.2.fq
+cat $Prefix-RFA/$Prefix.Mapped.NoPair.1.fq $Prefix-RFA/$Prefix.UnMapped.NoPair.1.fq $Prefix-RFA/$Prefix.Mapped.NoPair.2.fq  $Prefix-RFA/$Prefix.UnMapped.NoPair.2.fq > $Prefix-RFA/$Prefix.RFA.NP.fq
+rm $Prefix-RFA/$Prefix.Mapped.RePair.1.fq
+rm $Prefix-RFA/$Prefix.UnMapped.RePair.1.fq
+rm $Prefix-RFA/$Prefix.Mapped.RePair.2.fq
+rm $Prefix-RFA/$Prefix.UnMapped.RePair.2.fq
+rm $Prefix-RFA/$Prefix.Mapped.NoPair.1.fq
+rm $Prefix-RFA/$Prefix.UnMapped.NoPair.1.fq
+rm $Prefix-RFA/$Prefix.Mapped.NoPair.2.fq
+rm $Prefix-RFA/$Prefix.UnMapped.NoPair.2.fq
+fi
+if [[ -z $Expand && -n $SE ]]; then
+cat $Prefix-RFA/$Prefix.UnMapped.SE.fq $Prefix-RFA/$Prefix.Mapped.SE.fq > $Prefix-RFA/$Prefix.RFA.SE.fq
+rm $Prefix-RFA/$Prefix.UnMapped.SE.fq
+rm $Prefix-RFA/$Prefix.Mapped.SE.fq
+fi
 exit
