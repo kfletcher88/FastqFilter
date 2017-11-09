@@ -13,7 +13,7 @@
 #IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 #OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-usage="($basename "$0") [-h] [-d] [-1] [-2] [-o] [-s] [-T] [-L] --  A wrapper to run align paired end next generation sequencing reads to a custom database and output:
+usage="($basename "$0") [-h] [-d] [-1] [-2] [-M] [-o] [-s] [-T] [-L] --  A wrapper to run align paired end next generation sequencing reads to a custom database and output:
 	1. A pair of files containing paired, unmapped reads
 	2. A pair of files containing paired reads which mapped to target reference sequences
 
@@ -30,9 +30,10 @@ Options:
         -d bwa indexed fasta file - May be gzipped
         -1 Paired end read file 1 - May be gzipped
         -2 Paired end read file 2 - May be gzipped
-        -o Output prefix
+        -M Single ended reads - May be gzipped
+	-o Output prefix
         -s Unique string, by which target reference sequences may be identified
-	-T Number of threads (default = 1)
+	-T Number of threads (default = 8)
 	-L Dependency list
 "
 
@@ -46,7 +47,7 @@ All executable should be located in the PATH
 "
 #How about an option to obtain only unmapped reads
 #How about an option to obtain unpaired reads
-while getopts ':hd:1:2:o:s:T:L' option; do
+while getopts ':hd:1:2:M:o:s:T:L' option; do
         case "$option" in
                 h)  echo "$usage"
                          exit
@@ -57,6 +58,8 @@ while getopts ':hd:1:2:o:s:T:L' option; do
                          ;;
                 2)  R2=$OPTARG
                          ;;
+		M)  SE=$OPTARG
+			 ;;
                 o)  Prefix=$OPTARG
                          ;;
                 s)  string=$OPTARG
@@ -75,7 +78,7 @@ done
 
 
 #Check Arguments provided
-if [[ -z $DB || -z $R1 || -z $R2 || -z $Prefix || -z $string ]]; then
+if [[ -z $DB || -z $Prefix || -z $string ]]; then
        echo "
        ERROR: Some required variables are not set
 "
@@ -83,13 +86,39 @@ if [[ -z $DB || -z $R1 || -z $R2 || -z $Prefix || -z $string ]]; then
        exit 1
 fi
 
-#Set defaults if not arguments provided
-if [[ -z $Threads ]]; then
-Threads=1
-echo "
-Threads not specified, will proceed with default [1]
+if [[ -z $R1 || -z $R2 || -z $SE ]]; then
+	echo "
+	ERROR: No read files provided
+	Please provide either:
+	Paired End files with flags -1 & -2
+	Single End files with flag -M
 "
 fi
+
+if [[ -n $SE ]]; then 
+	echo "
+	Single end reads provided
+"
+fi
+
+if [[ -n $R1 && -n $R2 ]]; then
+	echo "
+	Paired end reads provided
+"
+fi
+
+#Set defaults if not arguments provided
+if [[ -z $Threads ]]; then
+Threads=8
+echo "
+Threads not specified, will proceed with default [8]
+"
+fi
+
+#Create Output directory
+mkdir -p $Prefix-RFA
+echo "Results will be output to directory:"
+echo $PWD/$Prefix-RFA 
 
 #Check for previously generated files to make sure they are not overwrote
 
@@ -113,7 +142,7 @@ else
 fi
 PFQ=$(command -v pairfq_lite.pl >//dev/null 2>&1 || { echo >&2 "Pairfq_lite.pl not detected. Please check that it is in your PATH"; })
 if [[ $PFQ != "" ]]; then
-	echo $PFQ
+	echo "$PFQ"
 	exit 1
 else
 	echo "pairfq_lite.pl detected"
@@ -152,16 +181,33 @@ echo "Index files not detected, let's build them!"
 fi
 
 if [[ $DB =~ .gz$ ]]; then
-bwa mem -t $Threads $DB $R1 $R2 | samtools view -bT $DB.unzip - | samtools sort -o $Prefix.sorted.bam -
-samtools index $Prefix.sorted.bam
-samtools fastq -f 4 -1 $Prefix.UnMapped.1.fq -2 $Prefix.UnMapped.2.fq $Prefix.sorted.bam
-samtools view $Prefix.sorted.bam | awk -v var="$string" '$3 ~ var' | samtools view -bT $DB.unzip | samtools fastq -1 $Prefix.Mapped.1.fq -2 $Prefix.Mapped.2.fq -
+	if [[ -n $R1 && -n $R2 ]]; then
+	bwa mem -t $Threads $DB $R1 $R2 | samtools view -bT $DB.unzip - | samtools sort -o $Prefix.sorted.bam -
+	samtools index $Prefix.sorted.bam
+	samtools fastq -f 4 -1 $Prefix.UnMapped.1.fq -2 $Prefix.UnMapped.2.fq $Prefix.sorted.bam
+	samtools view $Prefix.sorted.bam | awk -v var="$string" '$3 ~ var' | samtools view -bT $DB.unzip | samtools fastq -1 $Prefix.Mapped.1.fq -2 $Prefix.Mapped.2.fq -
+	fi
+	if [[ -n $SE ]]; then
+	bwa mem -t $Threads $DB $SE | samtools view -bT $DB.unzip - | samtools sort -o $Prefix.sorted.bam -
+	samtools index $Prefix.sorted.bam
+        samtools fastq -f 4 -0 $Prefix.UnMapped.SE.fq $Prefix.sorted.bam
+        samtools view $Prefix.sorted.bam | awk -v var="$string" '$3 ~ var' | samtools view -bT $DB.unzip | samtools fastq -0 $Prefix-RFA/$Prefix.Mapped.SE.fq -
+	fi
 rm $DB.unzip
+
 else
-bwa mem -t $Threads $DB $R1 $R2 | samtools view -bT $DB - | samtools sort -o $Prefix.sorted.bam $Prefix.bam
-samtools index $Prefix.sorted.bam
-samtools fastq -f 4 -1 $Prefix.UnMapped.1.fq -2 $Prefix.UnMapped.2.fq $Prefix.sorted.bam
-samtools view $Prefix.sorted.bam | awk -v var="$string" '$3 ~ var' | samtools view -bT $DB | samtools fastq -1 $Prefix.Mapped.1.fq -2 $Prefix.Mapped.2.fq -
+	if [[ -n $R1 && -n $R2 ]]; then
+	bwa mem -t $Threads $DB $R1 $R2 | samtools view -bT $DB - | samtools sort -o $Prefix.sorted.bam $Prefix.bam
+	samtools index $Prefix.sorted.bam
+	samtools fastq -f 4 -1 $Prefix.UnMapped.1.fq -2 $Prefix.UnMapped.2.fq $Prefix.sorted.bam
+	samtools view $Prefix.sorted.bam | awk -v var="$string" '$3 ~ var' | samtools view -bT $DB | samtools fastq -1 $Prefix.Mapped.1.fq -2 $Prefix.Mapped.2.fq -
+	fi
+	if [[ -n $SE ]]; then
+	bwa mem -t $Threads $DB $SE | samtools view -bT $DB - | samtools sort -o $Prefix.sorted.bam $Prefix.bam
+	samtools index $Prefix.sorted.bam
+        samtools fastq -f 4 -0 $Prefix.UnMapped.SE.fq  $Prefix.sorted.bam 
+        samtools view $Prefix.sorted.bam | awk -v var="$string" '$3 ~ var' | samtools view -bT $DB | samtools fastq -o $Prefix-RFA/$Prefix.Mapped.SE.fq 
+	fi
 fi
 
 #repair fastq files
@@ -172,13 +218,13 @@ pairfq_lite.pl addinfo -i $Prefix.UnMapped.1.fq -o $Prefix.UnMapped.info.1.fq -p
 pairfq_lite.pl addinfo -i $Prefix.UnMapped.2.fq -o $Prefix.UnMapped.info.2.fq -p 2
 
 
-pairfq_lite.pl makepairs -f $Prefix.Mapped.info.1.fq -r $Prefix.Mapped.info.2.fq -fp $Prefix.Mapped.RePair.1.fq -rp $Prefix.Mapped.RePair.2.fq -fs $Prefix.Mapped.NoPair.1.fq -rs $Prefix.Mapped.NoPair.2.fq
-pairfq_lite.pl makepairs -f $Prefix.UnMapped.info.1.fq -r $Prefix.UnMapped.info.2.fq -fp $Prefix.UnMapped.RePair.1.fq -rp $Prefix.UnMapped.RePair.2.fq -fs $Prefix.UnMapped.NoPair.1.fq -rs $Prefix.UnMapped.NoPair.2.fq
+pairfq_lite.pl makepairs -f $Prefix.Mapped.info.1.fq -r $Prefix.Mapped.info.2.fq -fp $Prefix-RFA/$Prefix.Mapped.RePair.1.fq -rp $Prefix-RFA/$Prefix.Mapped.RePair.2.fq -fs $Prefix-RFA/$Prefix.Mapped.NoPair.1.fq -rs $Prefix-RFA/$Prefix.Mapped.NoPair.2.fq
+pairfq_lite.pl makepairs -f $Prefix.UnMapped.info.1.fq -r $Prefix.UnMapped.info.2.fq -fp $Prefix-RFA/$Prefix.UnMapped.RePair.1.fq -rp $Prefix-RFA/$Prefix.UnMapped.RePair.2.fq -fs $Prefix-RFA/$Prefix.UnMapped.NoPair.1.fq -rs $Prefix-RFA/$Prefix.UnMapped.NoPair.2.fq
 #Clean up - Saves Gigs of disk space!
-rm $Prefix.UnMapped.NoPair.1.fq
-rm $Prefix.UnMapped.NoPair.2.fq
-rm $Prefix.Mapped.NoPair.1.fq
-rm $Prefix.Mapped.NoPair.2.fq
+#rm $Prefix.UnMapped.NoPair.1.fq
+#rm $Prefix.UnMapped.NoPair.2.fq
+#rm $Prefix.Mapped.NoPair.1.fq
+#rm $Prefix.Mapped.NoPair.2.fq
 rm $Prefix.Mapped.1.fq
 rm $Prefix.Mapped.2.fq
 rm $Prefix.UnMapped.1.fq
@@ -189,6 +235,4 @@ rm $Prefix.Mapped.info.1.fq
 rm $Prefix.Mapped.info.2.fq 
 rm $Prefix.UnMapped.info.1.fq 
 rm $Prefix.UnMapped.info.2.fq
-mkdir -p $Prefix
-mv $Prefix.UnMapped.RePair.1.fq $Prefix.UnMapped.RePair.2.fq $Prefix.Mapped.RePair.1.fq $Prefix.Mapped.RePair.2.fq $Prefix/
 exit
