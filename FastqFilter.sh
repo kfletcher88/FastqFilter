@@ -102,6 +102,8 @@ if [[ -z $R1 || -z $R2 || -z $SE ]]; then
 	Paired End files with flags -1 & -2
 	Single End files with flag -M
 "
+	echo "$usage"
+	exit 1
 fi
 
 if [[ -n $SE ]]; then 
