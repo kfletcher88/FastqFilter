@@ -194,13 +194,13 @@ fi
 if [[ $DB =~ .gz$ ]]; then
 	if [[ -n $R1 && -n $R2 ]]; then
 	bwa mem -t $Threads $DB $R1 $R2 | samtools view -bT $DB.unzip - | samtools sort -o $Prefix.sorted.bam -
-	samtools index $Prefix.sorted.bam
+#	samtools index $Prefix.sorted.bam
 	samtools fastq -f 4 -1 $Prefix.UnMapped.1.fq -2 $Prefix.UnMapped.2.fq $Prefix.sorted.bam
 	samtools view -F 4  $Prefix.sorted.bam | awk -v var="$string" '$3 ~ var' | samtools view -bT $DB.unzip | samtools fastq -1 $Prefix.Mapped.1.fq -2 $Prefix.Mapped.2.fq -
 	fi
 	if [[ -n $SE ]]; then
 	bwa mem -t $Threads $DB $SE | samtools view -bT $DB.unzip - | samtools sort -o $Prefix.sorted.bam -
-	samtools index $Prefix.sorted.bam
+#	samtools index $Prefix.sorted.bam
         samtools fastq -f 4 -0 $Prefix-RFA/$Prefix.UnMapped.SE.fq $Prefix.sorted.bam
         samtools view -F 4 $Prefix.sorted.bam | awk -v var="$string" '$3 ~ var' | samtools view -bT $DB.unzip | samtools fastq -0 $Prefix-RFA/$Prefix.Mapped.SE.fq -
 	fi
@@ -209,13 +209,13 @@ rm $DB.unzip
 else
 	if [[ -n $R1 && -n $R2 ]]; then
 	bwa mem -t $Threads $DB $R1 $R2 | samtools view -bT $DB - | samtools sort -o $Prefix.sorted.bam -
-	samtools index $Prefix.sorted.bam
+#	samtools index $Prefix.sorted.bam
 	samtools fastq -f 4 -1 $Prefix.UnMapped.1.fq -2 $Prefix.UnMapped.2.fq $Prefix.sorted.bam
 	samtools view -F 4 $Prefix.sorted.bam | awk -v var="$string" '$3 ~ var' | samtools view -bT $DB | samtools fastq -1 $Prefix.Mapped.1.fq -2 $Prefix.Mapped.2.fq -
 	fi
 	if [[ -n $SE ]]; then
 	bwa mem -t $Threads $DB $SE | samtools view -bT $DB - | samtools sort -o $Prefix.sorted.bam -
-	samtools index $Prefix.sorted.bam
+#	samtools index $Prefix.sorted.bam
         samtools fastq -f 4 -0 $Prefix-RFA/$Prefix.UnMapped.SE.fq  $Prefix.sorted.bam 
         samtools view -F 4 $Prefix.sorted.bam | awk -v var="$string" '$3 ~ var' | samtools view -bT $DB | samtools fastq -0 $Prefix-RFA/$Prefix.Mapped.SE.fq - 
 	fi
@@ -237,7 +237,7 @@ rm $Prefix.Mapped.2.fq
 rm $Prefix.UnMapped.1.fq
 rm $Prefix.UnMapped.2.fq
 rm $Prefix.sorted.bam
-rm $Prefix.sorted.bam.bai
+#rm $Prefix.sorted.bam.bai
 rm $Prefix.Mapped.info.1.fq 
 rm $Prefix.Mapped.info.2.fq 
 rm $Prefix.UnMapped.info.1.fq 
