@@ -95,7 +95,8 @@ if [[ -z $DB || -z $Prefix || -z $string ]]; then
        exit 1
 fi
 
-if [[ -z $R1 || -z $R2 && -z $SE ]]; then
+if [[ -z $R1 || -z $R2 ]]; then
+	if [[ -z $SE ]]; then
 	echo "
 	ERROR: No read files provided
 	Please provide either:
@@ -104,6 +105,7 @@ if [[ -z $R1 || -z $R2 && -z $SE ]]; then
 "
 	echo "$usage"
 	exit 1
+	fi
 fi
 
 if [[ -n $SE ]]; then 
@@ -223,6 +225,7 @@ fi
 
 #repair fastq files
 #Need to add subroutine, to only add info when necessary (something like check a read, if it ends \1 then).
+if [[ -n $R1 && -n $R2 ]]; then
 pairfq_lite.pl addinfo -i $Prefix.Mapped.1.fq -o $Prefix.Mapped.info.1.fq -p 1
 pairfq_lite.pl addinfo -i $Prefix.Mapped.2.fq -o $Prefix.Mapped.info.2.fq -p 2
 pairfq_lite.pl addinfo -i $Prefix.UnMapped.1.fq -o $Prefix.UnMapped.info.1.fq -p 1
@@ -230,20 +233,21 @@ pairfq_lite.pl addinfo -i $Prefix.UnMapped.2.fq -o $Prefix.UnMapped.info.2.fq -p
 cat $Prefix.Mapped.info.1.fq $Prefix.UnMapped.info.1.fq > $Prefix.All.1.fq
 cat $Prefix.Mapped.info.2.fq $Prefix.UnMapped.info.2.fq > $Prefix.All.2.fq
 pairfq_lite.pl makepairs -f $Prefix.All.1.fq -r $Prefix.All.2.fq -fp $Prefix-RFA/$Prefix.RePair.1.fq -rp $Prefix-RFA/$Prefix.RePair.2.fq -fs $Prefix-RFA/$Prefix.NoPair.1.fq -rs $Prefix-RFA/$Prefix.NoPair.2.fq
-
-#Clean up - Saves Gigs of disk space!
+#Pair Clean up
 rm $Prefix.Mapped.1.fq
 rm $Prefix.Mapped.2.fq
 rm $Prefix.UnMapped.1.fq
 rm $Prefix.UnMapped.2.fq
-rm $Prefix.sorted.bam
-#rm $Prefix.sorted.bam.bai
-rm $Prefix.Mapped.info.1.fq 
-rm $Prefix.Mapped.info.2.fq 
-rm $Prefix.UnMapped.info.1.fq 
+rm $Prefix.Mapped.info.1.fq
+rm $Prefix.Mapped.info.2.fq
+rm $Prefix.UnMapped.info.1.fq
 rm $Prefix.UnMapped.info.2.fq
 rm $Prefix.All.1.fq
 rm $Prefix.All.2.fq
+fi
+#Clean up - Saves Gigs of disk space!
+rm $Prefix.sorted.bam
+#rm $Prefix.sorted.bam.bai
 if [[ -z $Expand && -n $R1 && -n $R2 ]]; then
 cat $Prefix-RFA/$Prefix.NoPair.1.fq $Prefix-RFA/$Prefix.NoPair.2.fq > $Prefix-RFA/$Prefix.RFA.NP.fq
 rm $Prefix-RFA/$Prefix.NoPair.1.fq
